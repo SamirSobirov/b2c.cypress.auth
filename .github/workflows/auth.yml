@@ -1,0 +1,90 @@
+name: B2C Authentication AutoTest
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      user_chat_id:
+        description: 'ID чата для личного ответа'
+        required: false
+        default: ''
+
+jobs:
+  cypress-run:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cypress run
+        id: cypress
+        timeout-minutes: 15
+        uses: cypress-io/github-action@v6
+        with:
+          spec: cypress/e2e/monitoring/auth.cy.js
+          browser: chrome
+        env:
+          CYPRESS_LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
+          CYPRESS_LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+        # не роняем job сразу: ниже нужно разобрать статус и отправить отчёт
+        continue-on-error: true
+
+      - name: Parse Diagnostic Data
+        if: always()
+        run: |
+          # HTTP-код пишет сам тест в auth_api_status.txt.
+          # tr -d убирает пробелы и перевод строки, которые добавляются в CI.
+          if [ -f auth_api_status.txt ]; then
+            API_STATUS=$(cat auth_api_status.txt | tr -d '[:space:]')
+          else
+            API_STATUS="UNKNOWN"
+          fi
+
+          # Исход самого прогона Cypress: success / failure
+          TEST_RESULT="${{ steps.cypress.outcome }}"
+
+          if [[ ! "$API_STATUS" =~ ^[0-9]+$ ]]; then
+            # До запроса авторизации не дошли: упал UI, не открылась модалка
+            # или не заданы секреты LOGIN_EMAIL / LOGIN_PASSWORD
+            echo "MSG_STATUS=🔴 UI Error / Crash" >> $GITHUB_ENV
+            echo "MSG_CODE=N/A" >> $GITHUB_ENV
+          elif [[ "$API_STATUS" -ge 400 ]]; then
+            echo "MSG_STATUS=🆘 Server Error" >> $GITHUB_ENV
+            echo "MSG_CODE=HTTP $API_STATUS" >> $GITHUB_ENV
+          elif [[ "$TEST_RESULT" == "success" ]]; then
+            echo "MSG_STATUS=🟢 Success" >> $GITHUB_ENV
+            echo "MSG_CODE=HTTP $API_STATUS" >> $GITHUB_ENV
+          else
+            # Бэкенд ответил нормально, но UI-проверки после входа не прошли
+            echo "MSG_STATUS=🟡 UI Check Failed" >> $GITHUB_ENV
+            echo "MSG_CODE=HTTP $API_STATUS" >> $GITHUB_ENV
+          fi
+
+      - name: Upload Cypress Screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: cypress/screenshots/
+          if-no-files-found: ignore
+
+      - name: Send Telegram Notification
+        if: always()
+        uses: appleboy/telegram-action@master
+        with:
+          to: >-
+            ${{ (github.event.inputs.user_chat_id != '') &&
+            github.event.inputs.user_chat_id ||
+            secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
+          message: |
+            ${{ github.event.inputs.user_chat_id != '' && '👤 **Manual Testing**' || '📢 **Scheduled Monitoring**' }}
+
+            🔐 **Module:** B2C Authentication
+            📊 **Status:** ${{ env.MSG_STATUS }}
+
+            **API Response:** ${{ env.MSG_CODE }}
+            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
