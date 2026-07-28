@@ -85,6 +85,3 @@ jobs:
 
             🔐 **Module:** B2C Authentication
             📊 **Status:** ${{ env.MSG_STATUS }}
-
-            **API Response:** ${{ env.MSG_CODE }}
-            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
