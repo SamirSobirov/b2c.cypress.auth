@@ -28,7 +28,6 @@ jobs:
         env:
           CYPRESS_LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
           CYPRESS_LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
-        # не роняем job сразу: ниже нужно разобрать статус и отправить отчёт
         continue-on-error: true
 
       - name: Parse Diagnostic Data
