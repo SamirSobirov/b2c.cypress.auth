@@ -35,11 +35,14 @@ describe('Authentication Flow', () => {
     cy.visit('https://metatrip.asia/ru/', { timeout: T.PAGE });
 
     // 3. ОТКРЫТИЕ МОДАЛКИ "ВХОД В ПРОФИЛЬ"
-    cy.contains('nav button', 'Войти', { timeout: T.UI })
-      .should('be.visible')
-      .click({ timeout: T.UI });
-
-    cy.wait(PAUSE.MODAL); 
+    // Клик с повтором: страница на Nuxt приходит с сервера уже отрисованной,
+    // и до окончания гидратации кнопка кликается вхолостую — модалка не встаёт.
+    // На раннере GitHub Actions это ловилось стабильно, локально почти никогда.
+    cy.clickUntilVisible('nav button', '.p-dialog', {
+      text: 'Войти',
+      timeout: T.UI,
+      pause: PAUSE.MODAL,
+    });
 
     cy.get('.p-dialog', { timeout: T.UI }).should('be.visible').within(() => {
       cy.contains('Вход в профиль', { timeout: T.UI }).should('be.visible');
@@ -49,7 +52,7 @@ describe('Authentication Flow', () => {
       cy.wait(PAUSE.FIELD);
 
       // 5. ВВОД ПАРОЛЯ
-     cy.fillInput('input[name="password"]', PASSWORD, { timeout: T.UI });
+      cy.fillInput('input[name="password"]', PASSWORD, { timeout: T.UI });
       cy.wait(PAUSE.SUBMIT);
 
       // 6. КЛИК "ВОЙТИ"
